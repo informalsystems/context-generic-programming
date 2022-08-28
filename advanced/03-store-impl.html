@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Caching Querier - IBC Relayer Framework Guide (DRAFT)</title>
+        <title>Store Implementation - IBC Relayer Framework Guide (DRAFT)</title>
         <!-- Custom HTML head -->
         <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="">
@@ -75,7 +75,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="../01-introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../01-introduction/01-problem-statement.html"><strong aria-hidden="true">1.1.</strong> Problem Statement</a></li><li class="chapter-item expanded "><a href="../01-introduction/02-proposed-solution.html"><strong aria-hidden="true">1.2.</strong> Proposed Solution</a></li></ol></li><li class="chapter-item expanded "><a href="../02-context-generic-programming.html"><strong aria-hidden="true">2.</strong> Context-Generic Programming</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../context-generic-programming/01-simple-greeter.html"><strong aria-hidden="true">2.1.</strong> Simple Greeter</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/02-generic-context.html"><strong aria-hidden="true">2.2.</strong> Generic Context</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/03-context-implementation.html"><strong aria-hidden="true">2.3.</strong> Context Implementation</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/04-greeter-component.html"><strong aria-hidden="true">2.4.</strong> Greeter Component</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/05-daytime-greeter.html"><strong aria-hidden="true">2.5.</strong> Daytime Greeter</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/06-component-composition.html"><strong aria-hidden="true">2.6.</strong> Component Composition</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/07-person-querier.html"><strong aria-hidden="true">2.7.</strong> Person Querier</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/08-querier-consumer.html"><strong aria-hidden="true">2.8.</strong> Querier Consumer</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/09-store-impl.html"><strong aria-hidden="true">2.9.</strong> Store Implementation</a></li><li class="chapter-item expanded "><a href="../context-generic-programming/10-caching-querier.html" class="active"><strong aria-hidden="true">2.10.</strong> Caching Querier</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Beginner Guide</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../beginner/01-simple-greeter.html"><strong aria-hidden="true">2.1.</strong> Simple Greeter</a></li><li class="chapter-item expanded "><a href="../beginner/02-generic-context.html"><strong aria-hidden="true">2.2.</strong> Generic Context</a></li><li class="chapter-item expanded "><a href="../beginner/03-context-implementation.html"><strong aria-hidden="true">2.3.</strong> Context Implementation</a></li><li class="chapter-item expanded "><a href="../beginner/04-greeter-component.html"><strong aria-hidden="true">2.4.</strong> Greeter Component</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Intermediate Guide</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../intermediate/01-daytime-greeter.html"><strong aria-hidden="true">3.1.</strong> Daytime Greeter</a></li><li class="chapter-item expanded "><a href="../intermediate/02-component-composition.html"><strong aria-hidden="true">3.2.</strong> Component Composition</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Advanced Guide</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../advanced/01-person-querier.html"><strong aria-hidden="true">4.1.</strong> Person Querier</a></li><li class="chapter-item expanded "><a href="../advanced/02-querier-consumer.html"><strong aria-hidden="true">4.2.</strong> Querier Consumer</a></li><li class="chapter-item expanded "><a href="../advanced/03-store-impl.html" class="active"><strong aria-hidden="true">4.3.</strong> Store Implementation</a></li><li class="chapter-item expanded "><a href="../advanced/04-caching-querier.html"><strong aria-hidden="true">4.4.</strong> Caching Querier</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -134,63 +134,10 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="caching-querier"><a class="header" href="#caching-querier">Caching Querier</a></h1>
+                        <h1 id="store-implementation"><a class="header" href="#store-implementation">Store Implementation</a></h1>
 <pre><pre class="playground"><code class="language-rust edition2018"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span><span class="boring">use std::hash::Hash;
-</span><span class="boring">use std::collections::HashMap;
-</span><span class="boring">
-</span><span class="boring">trait HasError {
-</span><span class="boring">     type Error;
-</span><span class="boring">}
-</span><span class="boring">
-</span><span class="boring">trait PersonContext {
-</span><span class="boring">     type PersonId;
-</span><span class="boring">     type Person;
-</span><span class="boring">}
-</span><span class="boring">
-</span>trait PersonQuerier&lt;Context&gt;
-where
-    Context: PersonContext + HasError,
-{
-    fn query_person(context: &amp;Context, person_id: &amp;Context::PersonId)
-        -&gt; Result&lt;Context::Person, Context::Error&gt;;
-}
-
-trait PersonCacheContext: PersonContext {
-    fn person_cache(&amp;self) -&gt; &amp;HashMap&lt;Self::PersonId, Self::Person&gt;;
-}
-
-struct CachingPersonQuerier&lt;InQuerier&gt;(InQuerier);
-
-impl&lt;Context, InQuerier&gt; PersonQuerier&lt;Context&gt;
-    for CachingPersonQuerier&lt;InQuerier&gt;
-where
-    InQuerier: PersonQuerier&lt;Context&gt;,
-    Context: PersonCacheContext,
-    Context: HasError,
-    Context::PersonId: Hash + Eq,
-    Context::Person: Clone,
-{
-    fn query_person(context: &amp;Context, person_id: &amp;Context::PersonId)
-        -&gt; Result&lt;Context::Person, Context::Error&gt;
-    {
-        let entry = context.person_cache().get(person_id);
-
-        match entry {
-            Some(person) =&gt; Ok(person.clone()),
-            None =&gt; InQuerier::query_person(context, person_id),
-        }
-    }
-}
-<span class="boring">}
-</span></code></pre></pre>
-<h2 id="caching-app-context"><a class="header" href="#caching-app-context">Caching App Context</a></h2>
-<pre><pre class="playground"><code class="language-rust edition2018"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span><span class="boring">use std::hash::Hash;
 </span><span class="boring">use std::fmt::Display;
-</span><span class="boring">use std::collections::HashMap;
 </span><span class="boring">use std::convert::{TryFrom, TryInto};
 </span><span class="boring">
 </span><span class="boring">trait NamedPerson {
@@ -286,41 +233,194 @@ where
 </span><span class="boring">     }
 </span><span class="boring">}
 </span><span class="boring">
-</span>#[derive(Clone)]
-struct BasicPerson {
-    name: String,
-}
-
-<span class="boring">impl NamedPerson for BasicPerson {
+</span><span class="boring">struct BasicPerson {
+</span><span class="boring">     name: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl NamedPerson for BasicPerson {
 </span><span class="boring">     fn name(&amp;self) -&gt; &amp;str {
 </span><span class="boring">         &amp;self.name
 </span><span class="boring">     }
 </span><span class="boring">}
 </span><span class="boring">
-</span><span class="boring">trait PersonCacheContext: PersonContext {
-</span><span class="boring">     fn person_cache(&amp;self) -&gt; &amp;HashMap&lt;Self::PersonId, Self::Person&gt;;
+</span>struct FsKvStore { /* ... */ }
+struct KvStoreError { /* ... */ }
+
+struct ParseError { /* ... */ }
+
+impl HasError for FsKvStore {
+    type Error = KvStoreError;
+}
+
+impl KvStore for FsKvStore {
+    fn get(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, Self::Error&gt; {
+        unimplemented!() // stub
+    }
+}
+
+impl TryFrom&lt;Vec&lt;u8&gt;&gt; for BasicPerson {
+    type Error = ParseError;
+
+    fn try_from(bytes: Vec&lt;u8&gt;) -&gt; Result&lt;Self, Self::Error&gt; {
+        unimplemented!() // stub
+    }
+}
+
+enum AppError {
+    KvStore(KvStoreError),
+    Parse(ParseError),
+    // ...
+}
+
+impl From&lt;KvStoreError&gt; for AppError {
+    fn from(err: KvStoreError) -&gt; Self {
+        Self::KvStore(err)
+    }
+}
+
+impl From&lt;ParseError&gt; for AppError {
+    fn from(err: ParseError) -&gt; Self {
+        Self::Parse(err)
+    }
+}
+
+struct AppContext {
+    kv_store: FsKvStore,
+    // ...
+}
+
+impl HasError for AppContext {
+    type Error = AppError;
+}
+
+impl PersonContext for AppContext {
+    type PersonId = String;
+    type Person = BasicPerson;
+}
+
+impl KvStoreContext for AppContext {
+    type Store = FsKvStore;
+
+    fn store(&amp;self) -&gt; &amp;Self::Store {
+        &amp;self.kv_store
+    }
+}
+
+impl HasPersonQuerier for AppContext {
+    type PersonQuerier = KvStorePersonQuerier;
+}
+
+fn app_greeter() -&gt; impl Greeter&lt;AppContext&gt; {
+    SimpleGreeter
+}
+<span class="boring">}
+</span></code></pre></pre>
+<h2 id="multiple-context-implementations"><a class="header" href="#multiple-context-implementations">Multiple Context Implementations</a></h2>
+<pre><pre class="playground"><code class="language-rust edition2018"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use std::fmt::Display;
+</span><span class="boring">use std::convert::{TryFrom, TryInto};
+</span><span class="boring">
+</span><span class="boring">trait NamedPerson {
+</span><span class="boring">     fn name(&amp;self) -&gt; &amp;str;
 </span><span class="boring">}
 </span><span class="boring">
-</span><span class="boring">struct CachingPersonQuerier&lt;InQuerier&gt;(InQuerier);
+</span><span class="boring">trait HasError {
+</span><span class="boring">     type Error;
+</span><span class="boring">}
 </span><span class="boring">
-</span><span class="boring">impl&lt;Context, InQuerier&gt; PersonQuerier&lt;Context&gt;
-</span><span class="boring">     for CachingPersonQuerier&lt;InQuerier&gt;
+</span><span class="boring">trait PersonContext {
+</span><span class="boring">     type PersonId;
+</span><span class="boring">     type Person: NamedPerson;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait Greeter&lt;Context&gt;
 </span><span class="boring">where
-</span><span class="boring">     InQuerier: PersonQuerier&lt;Context&gt;,
-</span><span class="boring">     Context: PersonCacheContext,
-</span><span class="boring">     Context: HasError,
-</span><span class="boring">     Context::PersonId: Hash + Eq,
-</span><span class="boring">     Context::Person: Clone,
+</span><span class="boring">     Context: PersonContext + HasError,
 </span><span class="boring">{
-</span><span class="boring">     fn query_person(context: &amp;Context, person_id: &amp;Context::PersonId)
-</span><span class="boring">         -&gt; Result&lt;Context::Person, Context::Error&gt;
-</span><span class="boring">     {
-</span><span class="boring">         let entry = context.person_cache().get(person_id);
+</span><span class="boring">     fn greet(&amp;self, context: &amp;Context, person_id: &amp;Context::PersonId)
+</span><span class="boring">         -&gt; Result&lt;(), Context::Error&gt;;
+</span><span class="boring">}
 </span><span class="boring">
-</span><span class="boring">         match entry {
-</span><span class="boring">             Some(person) =&gt; Ok(person.clone()),
-</span><span class="boring">             None =&gt; InQuerier::query_person(context, person_id),
-</span><span class="boring">         }
+</span><span class="boring">trait PersonQuerier&lt;Context&gt;
+</span><span class="boring">where
+</span><span class="boring">     Context: PersonContext + HasError,
+</span><span class="boring">{
+</span><span class="boring">        fn query_person(context: &amp;Context, person_id: &amp;Context::PersonId)
+</span><span class="boring">            -&gt; Result&lt;Context::Person, Context::Error&gt;;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait KvStore: HasError {
+</span><span class="boring">     fn get(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;, Self::Error&gt;;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait KvStoreContext {
+</span><span class="boring">     type Store: KvStore;
+</span><span class="boring">
+</span><span class="boring">     fn store(&amp;self) -&gt; &amp;Self::Store;
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct KvStorePersonQuerier;
+</span><span class="boring">
+</span><span class="boring">impl&lt;Context, Store, PersonId, Person, Error, ParseError, StoreError&gt;
+</span><span class="boring">     PersonQuerier&lt;Context&gt; for KvStorePersonQuerier
+</span><span class="boring">where
+</span><span class="boring">     Context: KvStoreContext&lt;Store=Store&gt;,
+</span><span class="boring">     Context: PersonContext&lt;Person=Person, PersonId=PersonId&gt;,
+</span><span class="boring">     Context: HasError&lt;Error=Error&gt;,
+</span><span class="boring">     Store: KvStore&lt;Error=StoreError&gt;,
+</span><span class="boring">     PersonId: Display,
+</span><span class="boring">     Person: TryFrom&lt;Vec&lt;u8&gt;, Error=ParseError&gt;,
+</span><span class="boring">     Error: From&lt;StoreError&gt;,
+</span><span class="boring">     Error: From&lt;ParseError&gt;,
+</span><span class="boring">{
+</span><span class="boring">     fn query_person(context: &amp;Context, person_id: &amp;PersonId)
+</span><span class="boring">         -&gt; Result&lt;Person, Error&gt;
+</span><span class="boring">     {
+</span><span class="boring">         let key = format!(&quot;persons/{}&quot;, person_id);
+</span><span class="boring">
+</span><span class="boring">         let bytes = context.store().get(&amp;key)?;
+</span><span class="boring">
+</span><span class="boring">         let person = bytes.try_into()?;
+</span><span class="boring">
+</span><span class="boring">         Ok(person)
+</span><span class="boring">     }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">trait HasPersonQuerier:
+</span><span class="boring">     PersonContext + HasError + Sized
+</span><span class="boring">{
+</span><span class="boring">     type PersonQuerier: PersonQuerier&lt;Self&gt;;
+</span><span class="boring">
+</span><span class="boring">     fn query_person(&amp;self, person_id: &amp;Self::PersonId)
+</span><span class="boring">         -&gt; Result&lt;Self::Person, Self::Error&gt;
+</span><span class="boring">     {
+</span><span class="boring">         Self::PersonQuerier::query_person(self, person_id)
+</span><span class="boring">     }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct SimpleGreeter;
+</span><span class="boring">
+</span><span class="boring">impl&lt;Context&gt; Greeter&lt;Context&gt; for SimpleGreeter
+</span><span class="boring">where
+</span><span class="boring">     Context: HasPersonQuerier,
+</span><span class="boring">{
+</span><span class="boring">     fn greet(&amp;self, context: &amp;Context, person_id: &amp;Context::PersonId)
+</span><span class="boring">         -&gt; Result&lt;(), Context::Error&gt;
+</span><span class="boring">     {
+</span><span class="boring">         let person = context.query_person(person_id)?;
+</span><span class="boring">         println!(&quot;Hello, {}&quot;, person.name());
+</span><span class="boring">         Ok(())
+</span><span class="boring">     }
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">struct BasicPerson {
+</span><span class="boring">     name: String,
+</span><span class="boring">}
+</span><span class="boring">
+</span><span class="boring">impl NamedPerson for BasicPerson {
+</span><span class="boring">     fn name(&amp;self) -&gt; &amp;str {
+</span><span class="boring">         &amp;self.name
 </span><span class="boring">     }
 </span><span class="boring">}
 </span><span class="boring">
@@ -365,40 +465,68 @@ struct BasicPerson {
 </span><span class="boring">     }
 </span><span class="boring">}
 </span><span class="boring">
-</span>struct AppContext {
+</span>struct Foo;
+struct Bar;
+
+struct FooContext {
     kv_store: FsKvStore,
-    person_cache: HashMap&lt;String, BasicPerson&gt;,
+    foo: Foo,
     // ...
 }
 
-<span class="boring">impl HasError for AppContext {
-</span><span class="boring">     type Error = AppError;
-</span><span class="boring">}
-</span><span class="boring">
-</span><span class="boring">impl PersonContext for AppContext {
-</span><span class="boring">     type PersonId = String;
-</span><span class="boring">     type Person = BasicPerson;
-</span><span class="boring">}
-</span><span class="boring">
-</span><span class="boring">impl KvStoreContext for AppContext {
-</span><span class="boring">     type Store = FsKvStore;
-</span><span class="boring">
-</span><span class="boring">     fn store(&amp;self) -&gt; &amp;Self::Store {
-</span><span class="boring">         &amp;self.kv_store
-</span><span class="boring">     }
-</span><span class="boring">}
-</span><span class="boring">
-</span>impl PersonCacheContext for AppContext {
-    fn person_cache(&amp;self) -&gt; &amp;HashMap&lt;String, BasicPerson&gt; {
-        &amp;self.person_cache
+struct BarContext {
+    kv_store: FsKvStore,
+    bar: Bar,
+    // ...
+}
+
+impl HasError for FooContext {
+    type Error = AppError;
+}
+
+impl HasError for BarContext {
+    type Error = AppError;
+}
+
+impl PersonContext for FooContext {
+    type PersonId = String;
+    type Person = BasicPerson;
+}
+
+impl PersonContext for BarContext {
+    type PersonId = String;
+    type Person = BasicPerson;
+}
+
+impl KvStoreContext for FooContext {
+    type Store = FsKvStore;
+
+    fn store(&amp;self) -&gt; &amp;Self::Store {
+        &amp;self.kv_store
     }
 }
 
-impl HasPersonQuerier for AppContext {
-    type PersonQuerier = CachingPersonQuerier&lt;KvStorePersonQuerier&gt;;
+impl KvStoreContext for BarContext {
+    type Store = FsKvStore;
+
+    fn store(&amp;self) -&gt; &amp;Self::Store {
+        &amp;self.kv_store
+    }
 }
 
-fn app_greeter() -&gt; impl Greeter&lt;AppContext&gt; {
+impl HasPersonQuerier for FooContext {
+    type PersonQuerier = KvStorePersonQuerier;
+}
+
+impl HasPersonQuerier for BarContext {
+    type PersonQuerier = KvStorePersonQuerier;
+}
+
+fn foo_greeter() -&gt; impl Greeter&lt;FooContext&gt; {
+    SimpleGreeter
+}
+
+fn bar_greeter() -&gt; impl Greeter&lt;BarContext&gt; {
     SimpleGreeter
 }
 <span class="boring">}
@@ -408,8 +536,11 @@ fn app_greeter() -&gt; impl Greeter&lt;AppContext&gt; {
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../context-generic-programming/09-store-impl.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../advanced/02-querier-consumer.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
+                            </a>
+                            <a rel="next" href="../advanced/04-caching-querier.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
                             </a>
                         <div style="clear: both"></div>
                     </nav>
@@ -417,8 +548,11 @@ fn app_greeter() -&gt; impl Greeter&lt;AppContext&gt; {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../context-generic-programming/09-store-impl.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../advanced/02-querier-consumer.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
+                    </a>
+                    <a rel="next" href="../advanced/04-caching-querier.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
 
